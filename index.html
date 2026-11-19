@@ -462,7 +462,7 @@ body.plmode>.top,body.plmode>.sheet,body.plmode>#twinTag,body.plmode>.tbar,body.
     <button id="bCust" class="cust">⚙️ تخصيص الأدوات</button>
     <span class="sp"></span>
     <span class="credit">إعداد وتصميم: ضياء محمد علي</span>
-    <span class="ver" id="ver">الإصدار 33</span>
+    <span class="ver" id="ver">الإصدار 34</span>
     <span class="saved" id="saved">محفوظ تلقائياً ✓</span>
   </div>
   <div class="fmt">
@@ -4489,8 +4489,11 @@ function qNum(i){return EN()?"Q"+(i+1)+"/":"س"+(i+1)+"/"}
 /* numbering style of one branch: its own choice, otherwise the question's */
 const itSt=(q,i)=>(q.lst&&q.lst[i])||q.st||"ab";
 function autoLab(q,i){
-  // count only the branches before it that use the same style: أ ب [١ ٢ ٣] ج
-  const st=itSt(q,i);let k=0;for(let j=0;j<i;j++)if(itSt(q,j)===st)k++;
+  // branches in the question's own style count through the whole question: أ ب ج …
+  // a sub-branch (different style) starts again from ١ under each main branch: أ [١ ٢] ب [١ ٢]
+  const st=itSt(q,i),main=q.st||"ab";let k=0;
+  if(st===main){for(let j=0;j<i;j++)if(itSt(q,j)===main)k++}
+  else{for(let j=i-1;j>=0;j--){const sj=itSt(q,j);if(sj===main)break;if(sj===st)k++}}
   if(EN())return st==="num"?(k+1)+".":st==="none"?"":("abcdefghijklmnop"[k]||k+1)+")";
   return st==="num"?arNum(k+1)+"-":st==="none"?"":(AB[k]||k+1)+"/"}
 function defMarks(){return ""}
