@@ -359,6 +359,11 @@ body.plmode>.top,body.plmode>.sheet,body.plmode>#twinTag,body.plmode>.tbar,body.
 .pl-form label.wide{grid-column:1/-1}
 .pl-form input,.pl-form select,.pl-form textarea{font:inherit;font-size:15px;font-weight:400;border:1.5px solid #cdd7e1;border-radius:10px;padding:9px 10px;background:#fff;color:#111;width:100%}
 .pl-form textarea{min-height:110px;resize:vertical;line-height:1.7}
+.pl-fi{display:flex;gap:6px;align-items:stretch}
+.pl-fi>input,.pl-fi>textarea{flex:1;min-width:0}
+.pl-mic{flex:none;width:44px;background:#e4ebf2;color:#123a52;font-size:18px;padding:0;border-radius:10px;align-self:flex-start;height:42px}
+.pl-mic.on{background:var(--danger);color:#fff;animation:plPulse 1.2s infinite}
+@keyframes plPulse{50%{opacity:.6}}
 .pl-form input:focus,.pl-form select:focus,.pl-form textarea:focus{outline:none;border-color:#123a52;box-shadow:0 0 0 3px rgb(18 58 82/.12)}
 .pl-form .hint{font-weight:400;font-size:12px;color:#6b7c8c;line-height:1.6}
 .pl-seg{display:flex;gap:8px;flex-wrap:wrap}
@@ -462,7 +467,7 @@ body.plmode>.top,body.plmode>.sheet,body.plmode>#twinTag,body.plmode>.tbar,body.
     <button id="bCust" class="cust">⚙️ تخصيص الأدوات</button>
     <span class="sp"></span>
     <span class="credit">إعداد وتصميم: ضياء محمد علي</span>
-    <span class="ver" id="ver">الإصدار 34</span>
+    <span class="ver" id="ver">الإصدار 35</span>
     <span class="saved" id="saved">محفوظ تلقائياً ✓</span>
   </div>
   <div class="fmt">
@@ -7053,6 +7058,28 @@ const YEAR_MONTHS=[
   {m:0,w:2,note:"مراجعة عامة وامتحانات نصف السنة، ثم عطلة نصف السنة"},{m:1,w:3,note:"بداية الفصل الدراسي الثاني"},
   {m:2,w:3,note:"عطلة عيد نوروز"},{m:3,w:4},{m:4,w:3,note:"مراجعة عامة والامتحانات النهائية"}
 ];
+/* school months between the first and the last day of school, with the real number of school weeks in each */
+function schoolMonths(startV,endV){
+  const st=parseDate(startV),en=parseDate(endV);if(en<=st)en.setFullYear(st.getFullYear()+1,4,31);
+  const out=[];const m=new Date(st.getFullYear(),st.getMonth(),1,12);
+  while(m<=en&&out.length<12){
+    // a school week counts in the month where its Sunday falls; the first week counts if its Thursday is on or after the first day
+    let w=0;const d=new Date(m);while(d.getDay()!==0)d.setDate(d.getDate()+1);
+    const first=new Date(d);first.setDate(first.getDate()-7);const th=new Date(first);th.setDate(th.getDate()+4);
+    if(first.getMonth()!==m.getMonth()&&th.getMonth()===m.getMonth()&&th>=st&&first<=en&&out.length===0)w++;
+    for(;d.getMonth()===m.getMonth();d.setDate(d.getDate()+7)){const t=new Date(d);t.setDate(t.getDate()+4);if(t>=st&&d<=en)w++}
+    const o={m:m.getMonth(),y:m.getFullYear(),w,note:""};
+    if(!out.length)o.note="بداية الدوام "+fmtDate(st);
+    if(o.m===0){o.w=Math.max(1,o.w-2);o.note=(o.note?o.note+"، ":"")+"مراجعة وامتحانات نصف السنة، ثم عطلة نصف السنة"}
+    if(o.m===1&&out.length)o.note=(o.note?o.note+"، ":"")+"بداية الفصل الدراسي الثاني";
+    if(o.m===2&&out.length){o.w=Math.max(1,o.w-1);o.note=(o.note?o.note+"، ":"")+"عطلة عيد نوروز"}
+    out.push(o);m.setMonth(m.getMonth()+1);
+  }
+  if(out.length>1){const L=out[out.length-1];L.note=(L.note?L.note+"، ":"")+"مراجعة عامة والامتحانات النهائية (آخر دوام "+fmtDate(en)+")"}
+  return out;
+}
+function defStart(){const d=new Date();const y=d.getMonth()>=6?d.getFullYear():d.getFullYear()-1;return y+"-09-21"}
+function defEnd(s){const y=parseDate(s).getFullYear()+1;return y+"-05-31"}
 /* spread the units over the months in proportion to their weight */
 function distribute(us,months,ppw){
   const total=months.reduce((a,b)=>a+b.w,0);
@@ -7068,7 +7095,10 @@ function distribute(us,months,ppw){
     us.forEach((u,i)=>{
       const [ua,ub]=span[i];const o=Math.min(b,ub)-Math.max(a,ua);if(o<=1e-6)return;
       let ls=[];
-      if(u.lessons.length){const n=u.lessons.length;u.lessons.forEach((l,k)=>{const la=ua+(ub-ua)*k/n,lb=ua+(ub-ua)*(k+1)/n;if(Math.min(b,lb)-Math.max(a,la)>(lb-la)/2-1e-6)ls.push(l)})}
+      if(u.lessons.length){const n=u.lessons.length;
+        // a lesson is listed in the month it starts in; a month that only continues a long lesson shows it as (تكملة)
+        u.lessons.forEach((l,k)=>{const la=ua+(ub-ua)*k/n;if(la>=a-1e-6&&la<b-1e-6)ls.push(l)});
+        if(!ls.length){const k=Math.min(n-1,Math.floor((a-ua)/((ub-ua)/n)));if(k>=0)ls.push(u.lessons[k]+" (تكملة)")}}
       inMonth.push({name:u.name,lessons:ls,cont:ua<a-1e-6});
     });
     return {...mo,units:inMonth,periods:mo.w*ppw};
@@ -7192,13 +7222,13 @@ function writeMonthly(f,ai){
 function writeTerm(f,ai,yearly){
   const en=kind(f.subject)==="en";
   const ppw=Math.max(1,+f.ppw||5);
-  let months=YEAR_MONTHS.map(x=>({...x}));
-  if(!yearly)months=f.term==="2"?months.slice(4):months.slice(0,5);
+  let months=schoolMonths(f.start||defStart(),f.end||defEnd(f.start||defStart()));
+  if(!yearly){const k=months.findIndex(x=>x.m===1);const cut=k<0?Math.ceil(months.length/2):k;months=f.term==="2"?months.slice(cut):months.slice(0,cut)}
   const us=units(f.units);
   let rows;
   if(ai&&ai.length)rows=ai.map((r,i)=>({m:months[i]?months[i].m:null,label:r.month,units:[{name:r.units||"",lessons:r.lessons?[r.lessons]:[]}],periods:r.periods,note:r.notes,w:months[i]?months[i].w:""}));
   else rows=distribute(us,months,ppw);
-  const y0=(()=>{const d=new Date();return d.getMonth()>=6?d.getFullYear():d.getFullYear()-1})();
+  const y0=parseDate(f.start||defStart()).getFullYear();
   const yr=f.year||(y0+" – "+(y0+1));
   const L=en?{t:yearly?"Annual Plan":(f.term==="2"?"Second Term Plan":"First Term Plan"),mo:"Month",wk:"Weeks",un:"Units / Chapters",ls:"Lessons",n:"Periods",no:"Notes",tot:"Total"}
     :{t:yearly?"الخطة السنوية":(f.term==="2"?"خطة الفصل الدراسي الثاني":"خطة الفصل الدراسي الأول"),mo:"الشهر",wk:"عدد الأسابيع",un:"الوحدات / الفصول",ls:"الموضوعات والدروس",n:"عدد الحصص",no:"ملاحظات",tot:"المجموع"};
@@ -7291,7 +7321,7 @@ function setBar(title,btns){
   $p("#plH").textContent=title;const x=$p("#plBarX");x.innerHTML="";btns.forEach(b=>x.append(b));
 }
 function showHome(){
-  flush();view="home";cur=null;
+  stopFieldMic();flush();view="home";cur=null;
   $p("#plHome").hidden=false;$p("#plNew").hidden=true;$p("#plStage").hidden=true;$p("#plTools").hidden=true;setOrientPage(null);
   setBar("📘 خطط المدرس",[]);
   const P=prof();const H=$p("#plHome");H.innerHTML="";
@@ -7369,7 +7399,7 @@ function showNew(type){
   setBar(T.ic+" "+T.n,[mkBtn("↩ الخطط",showHome)]);
   const today=new Date(),iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
   const last=st.plans.filter(p=>p.pid===st.cur&&p.subject===st.subj).sort((a,b)=>b.updated-a.updated)[0];
-  const f=form={subject:st.subj||(P.subjects||[])[0]||"",grade:(last&&last.grade)||"",date:iso(today),period:"الأولى",dur:"45",style:"trad",ppw:"5",month:today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0"),term:today.getMonth()>=1&&today.getMonth()<=5?"2":"1",topic:"",unit:"",topics:"",units:(last&&last.form&&last.form.units)||"",notes:""};
+  const f=form={start:(last&&last.form&&last.form.start)||defStart(),end:(last&&last.form&&last.form.end)||"",subject:st.subj||(P.subjects||[])[0]||"",grade:(last&&last.grade)||"",date:iso(today),period:"الأولى",dur:"45",style:"trad",ppw:"5",month:today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0"),term:today.getMonth()>=1&&today.getMonth()<=5?"2":"1",topic:"",unit:"",topics:"",units:(last&&last.form&&last.form.units)||"",notes:""};
   const N=$p("#plNew");
   const fld=(lab,inner,wide,hint)=>'<label'+(wide?' class="wide"':"")+'>'+lab+inner+(hint?'<span class="hint">'+hint+'</span>':"")+'</label>';
   const inp=(k,ph,type2,list2)=>'<input data-k="'+k+'" value="'+esc(f[k])+'"'+(ph?' placeholder="'+esc(ph)+'"':"")+(type2?' type="'+type2+'"':"")+(list2?' list="'+list2+'"':"")+'>';
@@ -7389,6 +7419,8 @@ function showNew(type){
     h+=fld("الشهر",inp("month","","month"))+fld("عدد الحصص بالأسبوع",sel("ppw",[1,2,3,4,5,6,7,8].map(n=>[n,ar(n)+" حصص"])))+
       fld("موضوعات الشهر (كل موضوع بسطر)",ta("topics","موضوع / درس\nموضوع / درس\n…"),true,"تتوزّع على أسابيع الشهر بالترتيب");
   }else{
+    h+=fld("تاريخ بداية الدوام",inp("start","","date"),false,"أول يوم دوام بالعام الدراسي، منه تبدي الخطة وتنحسب الأسابيع")+
+      fld("تاريخ نهاية الدوام",inp("end","","date"),false,"اختياري. إذا تتركه فارغ يصير آخر أيار");
     if(type==="semester")h+=fld("الفصل الدراسي",sel("term",[["1","الفصل الأول (أيلول – كانون الثاني)"],["2","الفصل الثاني (شباط – أيار)"]]));
     h+=fld("عدد الحصص بالأسبوع",sel("ppw",[1,2,3,4,5,6,7,8].map(n=>[n,ar(n)+" حصص"])))+
       fld("وحدات / فصول الكتاب",ta("units","الوحدة الأولى: وطننا العراق : 8\n- موقع العراق\n- سطح العراق\nالوحدة الثانية: …"),true,
@@ -7399,6 +7431,10 @@ function showNew(type){
     '<div class="pl-acts"><button class="g" data-go="1">✨ إنشاء الخطة</button>'+(type!=="semester"&&type!=="yearly"?'<button class="ai" data-go="ai">🤖 إنشاء بالذكاء الاصطناعي (محتوى الدرس)</button>':'<button class="ai" data-go="units">🤖 اقترح وحدات الكتاب</button>')+'</div></div>';
   N.innerHTML=h;
   N.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{f[el.dataset.k]=el.value}));
+  N.querySelectorAll("input[data-k]:not([type]),textarea[data-k]").forEach(el=>{
+    const row=document.createElement("div");row.className="pl-fi";el.before(row);row.append(el);
+    const b=document.createElement("button");b.type="button";b.className="pl-mic";b.textContent="🎤";b.title="اكتب بالصوت";
+    b.onclick=()=>fieldMic(el,b);row.append(b)});
   const sg=N.querySelector("#plStyle");
   if(sg){const draw=()=>sg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.v===f.style));draw();sg.onclick=e=>{const b=e.target.closest("button");if(b){f.style=b.dataset.v;draw()}}}
   N.querySelector('[data-go="1"]').onclick=()=>create(false);
@@ -7414,7 +7450,35 @@ function showNew(type){
   };
   app.scrollTop=0;
 }
+/* dictation straight into a form field. «سطر جديد» starts a new line, «درس جديد» a new lesson line (- …) */
+let fRec=null,fBtn=null;
+function fieldMic(el,btn){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(fRec){const same=fBtn===btn;try{fRec.onend=null;fRec.stop()}catch(e){}fRec=null;if(fBtn){fBtn.classList.remove("on");fBtn.textContent="🎤"}fBtn=null;if(same)return}
+  if(!R){el.focus();toast("المتصفح ما يدعم الإملاء هنا، استخدم مايك الكيبورد 🎤");return}
+  const r=new R();fRec=r;fBtn=btn;btn.classList.add("on");btn.textContent="⏹";
+  r.lang=kind(form.subject)==="en"&&el.dataset.k!=="subject"&&el.dataset.k!=="grade"?"en-US":"ar-IQ";
+  r.interimResults=false;r.continuous=!/android/i.test(navigator.userAgent);
+  let lastT="",lastAt=0;
+  r.onresult=e=>{
+    for(let i=e.resultIndex;i<e.results.length;i++){if(!e.results[i].isFinal)continue;
+      let t=e.results[i][0].transcript.trim();if(!t)continue;
+      if(t===lastT&&Date.now()-lastAt<1500)continue;lastT=t;lastAt=Date.now();
+      if(/^(امسح|امسح الكل|مسح)$/.test(t)){el.value="";el.dispatchEvent(new Event("input"));continue}
+      const multi=el.tagName==="TEXTAREA";
+      if(multi)t=t.replace(/\s*(سطر جديد|سطر جديده|new line)\s*/g,"\n").replace(/\s*(درس جديد|lesson)\s*/g,"\n- ").replace(/\s*(وحده جديده|وحدة جديدة)\s*/g,"\n");
+      else t=t.replace(/\s*(سطر جديد|درس جديد)\s*/g," ");
+      const v=el.value;const sep=!v||/[\n ]$/.test(v)||/^\n/.test(t)?"":" ";
+      el.value=(v+sep+t).replace(/\n{3,}/g,"\n\n").replace(/^\n+/,"");el.dispatchEvent(new Event("input"));
+      if(multi)el.scrollTop=el.scrollHeight;
+    }};
+  r.onerror=e=>{if(e.error==="not-allowed")toast("اسمح للمتصفح يستخدم المايك");else if(e.error==="network")toast("الإملاء يحتاج إنترنت")};
+  r.onend=()=>{if(fRec===r){try{r.start()}catch(e){fRec=null;btn.classList.remove("on");btn.textContent="🎤"}}};
+  try{r.start();toast(el.tagName==="TEXTAREA"?"احچي… «سطر جديد» لسطر جديد، «درس جديد» لدرس تحت الوحدة. دوس ⏹ لمن تخلص":"احچي… دوس ⏹ لمن تخلص")}catch(e){fRec=null;btn.classList.remove("on");btn.textContent="🎤"}
+}
+function stopFieldMic(){if(fRec){try{fRec.onend=null;fRec.stop()}catch(e){}fRec=null;if(fBtn){fBtn.classList.remove("on");fBtn.textContent="🎤"}fBtn=null}}
 async function create(useAi){
+  stopFieldMic();
   const f=form;
   if(!f.subject.trim()){toast("اكتب اسم المادة");return}
   if(ntype==="daily"&&!f.topic.trim()){toast("اكتب موضوع الدرس");return}
